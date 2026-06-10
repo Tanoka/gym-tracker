@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gym Tracker - Mis Rutinas</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+            --header-bg: #ffffff;
+            --active-day: #2563eb;
+        }
+
+        body.dark-mode {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f1f5f9;
+            --border-color: #334155;
+            --header-bg: #1e293b;
+            --active-day: #fbbf24;
+        }
+
+        /* Estilos para marcar días activos en Flatpickr */
+        .has-activity {
+            position: relative;
+            font-weight: bold !important;
+            color: var(--primary-color) !important;
+        }
+        .has-activity::after {
+            content: "";
+            position: absolute;
+            bottom: 3px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: var(--active-day);
+        }
+
+        /* Ajustes Flatpickr Dark Mode */
+        .dark-mode .flatpickr-calendar {
+            background: #1e293b;
+            border-color: #334155;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .dark-mode .flatpickr-day { color: #f1f5f9; }
+        .dark-mode .flatpickr-day:hover { background: #334155; }
+        .dark-mode .flatpickr-current-month, .dark-mode .flatpickr-month { color: #f1f5f9; fill: #f1f5f9; }
+        .dark-mode .flatpickr-weekday { color: #94a3b8; }
+        .dark-mode .flatpickr-day.selected { background: var(--primary-color); border-color: var(--primary-color); }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 16px;
+            padding-top: 60px; /* Espacio para el header fijo */
+            line-height: 1.5;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: var(--header-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .settings-container {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1001;
+        }
+
+        .settings-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 5px;
+            color: var(--text-color);
+            width: auto;
+            margin: 0;
+        }
+
+        .settings-menu {
+            position: absolute;
+            top: 40px;
+            right: 0;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: none;
+            min-width: 180px;
+            overflow: hidden;
+        }
+
+        .settings-menu.active {
+            display: block;
+        }
+
+        .menu-item {
+            padding: 12px 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .menu-item:last-child {
+            border-bottom: none;
+        }
+
+        .menu-item:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        body.dark-mode .menu-item:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Tabs Styles */
+        .tabs {
+            display: flex;
+            background: var(--card-bg);
+            border-radius: 12px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid var(--border-color);
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s;
+            border-radius: 0 !important;
+            margin: 0 !important;
+            background: none;
+            color: var(--text-color);
+            opacity: 0.6;
+        }
+
+        .tab-btn.active {
+            background: var(--primary-color);
+            color: white;
+            opacity: 1;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .edit-info {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        body.dark-mode .edit-info {
+            background: #451a03;
+            border-color: #b45309;
+            color: #fbbf24;
+        }
+
+        h2 {
+            text-align: center;
+            color: var(--primary-color);
+        }
+
+        .card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+        }
+
+        select, input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            box-sizing: border-box;
+            background: var(--card-bg);
+            color: var(--text-color);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input {
+            width: auto;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            margin-bottom: 10px;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-secondary {
+            background-color: #64748b;
+            color: white;
+        }
+
+        .history-item {
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 0;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .date-header {
+            background: var(--border-color);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .set-details {
+            font-size: 0.9rem;
+            color: var(--text-color);
+            opacity: 0.8;
+        }
+
+        .exercise-name {
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .notes {
+            font-style: italic;
+            font-size: 0.85rem;
+            margin-top: 4px;
+            opacity: 0.7;
+        }
+
+        @media (max-width: 480px) {
+            body { padding: 10px; padding-top: 60px; }
+            .card { padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Gym Tracker</h1>
+</div>
+
+<div class="settings-container">
+    <button class="settings-btn" onclick="toggleSettingsMenu()">⚙️</button>
+    <div id="settingsMenu" class="settings-menu">
+        <div class="menu-item" onclick="exportCSV()">
+            <span>📥</span> Exportar CSV
+        </div>
+        <div class="menu-item" onclick="document.getElementById('csvFileInput').click()">
+            <span>📤</span> Importar CSV
+        </div>
+        <input type="file" id="csvFileInput" style="display:none;" accept=".csv" onchange="importCSV(this)">
+        <div class="menu-item" onclick="toggleDarkMode()">
+            <span id="darkIcon">🌙</span> <span id="darkText">Modo Oscuro</span>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="tabs">
+        <div id="tab-entrada" class="tab-btn active" onclick="switchTab('entrada')">Entrada</div>
+        <div id="tab-historial" class="tab-btn" onclick="switchTab('historial')">Historial</div>
+    </div>
+
+    <!-- Contenido Pestaña Entrada -->
+    <div id="content-entrada" class="tab-content active">
+        <div id="editIndicator" class="edit-info">
+            <span>⚠️ Editando serie del <strong id="editDateLabel"></strong></span>
+            <button onclick="resetForm()" style="width: auto; padding: 4px 8px; margin: 0; font-size: 0.7rem; background: #92400e; color: white; border-radius: 4px;">Cancelar</button>
+        </div>
+
+        <div class="card">
+            <h2 id="formTitle" style="margin-top:0; font-size: 1.2rem;">Nueva Serie</h2>
+            <form id="workoutForm">
+                <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label for="exercise">Ejercicio</label>
+                    <select id="exercise" required>
+                        <optgroup label="Espalda">
+                            <option value="Jalón al pecho">Jalón al pecho</option>
+                            <option value="Remo maquina">Remo maquina</option>
+                            <option value="Remo una mano">Remo una mano</option>
+                        </optgroup>
+                        <optgroup label="Pecho">
+                            <option value="Press inclinado maquina">Press inclinado maquina</option>
+                            <option value="Aperturas">Aperturas</option>
+                        </optgroup>
+                        <optgroup label="Piernas">
+                            <option value="Prensa">Prensa</option>
+                            <option value="Gemelos en prensa">Gemelos en prensa</option>
+                            <option value="Extension cuádriceps">Extension cuádriceps</option>
+                            <option value="Curl femoral sentado">Curl femoral sentado</option>
+                            <option value="Curl femoral tumbado">Curl femoral tumbado</option>
+                        </optgroup>
+                        <optgroup label="Otros">
+                            <option value="Triceps maquina">Triceps maquina</option>
+                            <option value="Triceps polea">Triceps polea</option>
+                            <option value="Curl de biceps concentrado">Curl de biceps concentrado</option>
+                            <option value="Elevaciones laterales en maquina">Elevaciones laterales en maquina</option>
+                            <option value="Jalón a la cara">Jalón a la cara</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label for="sets">Series</label>
+                        <select id="sets" required></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="reps">Reps</label>
+                        <select id="reps" required></select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="form-group">
+                        <label for="weight">Peso (kg)</label>
+                        <input type="number" id="weight" step="0.1" placeholder="0.0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="rir">RIR</label>
+                        <select id="rir" required></select>
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="failure">
+                    <label for="failure">¿Fallo (no pudo acabar)?</label>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Notas</label>
+                    <textarea id="notes" rows="2" placeholder="Opcional..."></textarea>
+                </div>
+
+                <button type="submit" id="submitBtn" class="btn-primary">Guardar Serie</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Contenido Pestaña Historial -->
+    <div id="content-historial" class="tab-content">
+        <div id="history">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0; font-size: 1.2rem;">Tu Sesión</h2>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <button onclick="changeDate(-1)" style="width: auto; padding: 5px 10px; margin: 0; font-size: 0.8rem; background: var(--border-color); color: var(--text-color);">&larr;</button>
+                    <input type="date" id="historyDatePicker" style="width: auto; padding: 4px; font-size: 0.8rem;">
+                    <button onclick="changeDate(1)" style="width: auto; padding: 5px 10px; margin: 0; font-size: 0.8rem; background: var(--border-color); color: var(--text-color);">&rarr;</button>
+                </div>
+            </div>
+            <div id="historyList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Configuración de Dexie
+    const db = new Dexie("GymTrackerDB");
+    db.version(1).stores({
+        sets: "++id, date, exercise, timestamp"
+    });
+
+    let currentViewDate = new Date();
+    let fp; 
+    let activeDates = new Set();
+
+    // Lógica de Pestañas
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        document.getElementById(`tab-${tab}`).classList.add('active');
+        document.getElementById(`content-${tab}`).classList.add('active');
+    }
+
+    // Menu y Modo Oscuro
+    function toggleSettingsMenu() {
+        document.getElementById('settingsMenu').classList.toggle('active');
+    }
+
+    window.onclick = function(event) {
+        if (!event.target.matches('.settings-btn')) {
+            const menu = document.getElementById('settingsMenu');
+            if (menu && menu.classList.contains('active')) {
+                menu.classList.remove('active');
+            }
+        }
+    }
+
+    function toggleDarkMode() {
+        const isDark = document.body.classList.toggle('dark-mode');
+        localStorage.setItem('darkMode', isDark);
+        updateDarkUI(isDark);
+    }
+
+    function updateDarkUI(isDark) {
+        document.getElementById('darkIcon').textContent = isDark ? '☀️' : '🌙';
+        document.getElementById('darkText').textContent = isDark ? 'Modo Claro' : 'Modo Oscuro';
+    }
+
+    if (localStorage.getItem('darkMode') === 'true') {
+        document.body.classList.add('dark-mode');
+        updateDarkUI(true);
+    }
+
+    async function updateActiveDays() {
+        const allDates = await db.sets.orderBy('date').uniqueKeys();
+        activeDates = new Set();
+        allDates.forEach(dateStr => {
+            const [d, m, y] = dateStr.split('/');
+            activeDates.add(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
+        });
+        if (fp) fp.redraw();
+    }
+
+    function setDateFromPicker(val) {
+        if (!val) return;
+        const [year, month, day] = val.split('-').map(Number);
+        currentViewDate = new Date(year, month - 1, day);
+        loadHistory();
+    }
+
+    function changeDate(days) {
+        currentViewDate.setDate(currentViewDate.getDate() + days);
+        loadHistory();
+    }
+
+    function formatDate(date) {
+        return date.toLocaleDateString('es-ES');
+    }
+
+    function formatDateISO(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function populateSelects() {
+        const repsSelect = document.getElementById('reps');
+        repsSelect.innerHTML = '';
+        for (let i = 6; i <= 20; i++) {
+            repsSelect.add(new Option(i, i));
+        }
+
+        const setsSelect = document.getElementById('sets');
+        setsSelect.innerHTML = '';
+        for (let i = 2; i <= 5; i++) {
+            setsSelect.add(new Option(i, i));
+        }
+
+        const rirSelect = document.getElementById('rir');
+        rirSelect.innerHTML = '';
+        for (let i = 0; i <= 4; i++) {
+            rirSelect.add(new Option(i, i));
+        }
+    }
+
+    function resetForm() {
+        document.getElementById('workoutForm').reset();
+        document.getElementById('editId').value = '';
+        document.getElementById('formTitle').textContent = 'Nueva Serie';
+        document.getElementById('submitBtn').textContent = 'Guardar Serie';
+        document.getElementById('editIndicator').style.display = 'none';
+        populateSelects();
+    }
+
+    document.getElementById('workoutForm').onsubmit = async (e) => {
+        e.preventDefault();
+        
+        const editId = document.getElementById('editId').value;
+        const now = new Date();
+        
+        let targetDate = formatDate(now);
+        let timestamp = now.getTime();
+
+        if (editId) {
+            const oldSet = await db.sets.get(parseInt(editId));
+            targetDate = oldSet.date;
+            timestamp = oldSet.timestamp;
+        }
+
+        const setData = {
+            exercise: document.getElementById('exercise').value,
+            sets: parseInt(document.getElementById('sets').value),
+            reps: parseInt(document.getElementById('reps').value),
+            weight: parseFloat(document.getElementById('weight').value),
+            rir: parseInt(document.getElementById('rir').value),
+            failure: document.getElementById('failure').checked,
+            notes: document.getElementById('notes').value,
+            date: targetDate,
+            timestamp: timestamp
+        };
+
+        if (editId) {
+            await db.sets.update(parseInt(editId), setData);
+        } else {
+            await db.sets.add(setData);
+            currentViewDate = now;
+        }
+
+        resetForm();
+        loadHistory();
+        updateActiveDays();
+        if (editId) switchTab('historial');
+    };
+
+    async function editSet(id) {
+        const set = await db.sets.get(id);
+        if (!set) return;
+
+        document.getElementById('editId').value = set.id;
+        document.getElementById('exercise').value = set.exercise;
+        document.getElementById('sets').value = set.sets;
+        document.getElementById('reps').value = set.reps;
+        document.getElementById('weight').value = set.weight;
+        document.getElementById('rir').value = set.rir;
+        document.getElementById('failure').checked = set.failure;
+        document.getElementById('notes').value = set.notes;
+
+        document.getElementById('formTitle').textContent = 'Editar Serie';
+        document.getElementById('submitBtn').textContent = 'Actualizar Serie';
+        
+        document.getElementById('editDateLabel').textContent = set.date;
+        document.getElementById('editIndicator').style.display = 'flex';
+        
+        switchTab('entrada');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteSet(id) {
+        if (confirm('¿Estás seguro de que quieres borrar esta serie?')) {
+            await db.sets.delete(id);
+            loadHistory();
+            updateActiveDays();
+        }
+    }
+
+    async function loadHistory() {
+        const historyList = document.getElementById('historyList');
+        const dateStr = formatDate(currentViewDate);
+        
+        if (fp) fp.setDate(currentViewDate, false);
+        
+        const setsOfDay = await db.sets.where('date').equals(dateStr).toArray();
+        
+        historyList.innerHTML = '';
+        
+        const dateDiv = document.createElement('div');
+        dateDiv.className = 'date-header';
+        dateDiv.style.textAlign = 'center';
+        dateDiv.textContent = (dateStr === formatDate(new Date())) ? `Hoy (${dateStr})` : dateStr;
+        historyList.appendChild(dateDiv);
+
+        if (setsOfDay.length === 0) {
+            historyList.innerHTML += '<p style="text-align:center; padding: 20px;">No hay registros para este día.</p>';
+        } else {
+            setsOfDay.sort((a, b) => a.timestamp - b.timestamp);
+            
+            setsOfDay.forEach(set => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+                item.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <div class="exercise-name">${set.exercise}</div>
+                            <div class="set-details">
+                                ${set.sets} series x ${set.reps} reps | ${set.weight}kg | RIR ${set.rir}
+                                ${set.failure ? ' | <span style="color:red">FALLO</span>' : ''}
+                            </div>
+                            ${set.notes ? `<div class="notes">${set.notes}</div>` : ''}
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="editSet(${set.id})" style="width: auto; padding: 6px 10px; font-size: 0.8rem; background: #3b82f6; color: white; margin: 0; border-radius: 4px;">Editar</button>
+                            <button onclick="deleteSet(${set.id})" style="width: auto; padding: 6px 10px; font-size: 0.8rem; background: #ef4444; color: white; margin: 0; border-radius: 4px;">Borrar</button>
+                        </div>
+                    </div>
+                `;
+                historyList.appendChild(item);
+            });
+        }
+    }
+
+    async function exportCSV() {
+        const allSets = await db.sets.toArray();
+        if (allSets.length === 0) {
+            alert('No hay datos para exportar.');
+            return;
+        }
+        const headers = ["Fecha", "Ejercicio", "Series", "Repeticiones", "Peso (kg)", "RIR", "Fallo", "Notas"];
+        const rows = allSets.map(s => [
+            s.date, s.exercise, s.sets, s.reps, s.weight, s.rir, s.failure ? "SÍ" : "NO", s.notes ? s.notes.replace(/"/g, '""') : ""
+        ]);
+        let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.map(cell => `"${cell}"`).join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "historial_gym.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    async function importCSV(input) {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target.result;
+            const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+            if (lines.length <= 1) { alert('El archivo está vacío o no es válido.'); return; }
+            const rows = lines.slice(1);
+            let importedCount = 0; let skippedCount = 0;
+            try {
+                for (const row of rows) {
+                    const cells = []; let current = ''; let inQuotes = false;
+                    for (let i = 0; i < row.length; i++) {
+                        const char = row[i];
+                        if (char === '"') { if (inQuotes && row[i+1] === '"') { current += '"'; i++; } else { inQuotes = !inQuotes; } }
+                        else if (char === ',' && !inQuotes) { cells.push(current.trim()); current = ''; }
+                        else { current += char; }
+                    }
+                    cells.push(current.trim());
+                    if (cells.length < 7) continue;
+                    let [dateStr, exercise, sets, reps, weight, rir, failure, notes] = cells;
+                    const nSets = parseInt(sets) || 0; const nReps = parseInt(reps) || 0; const nWeight = parseFloat(weight) || 0;
+                    const nRir = parseInt(rir) || 0; const bFailure = failure === "SÍ" || failure === "true"; const sNotes = notes || "";
+                    let normalizedDate; let timestamp;
+                    try {
+                        let d, m, y; if (dateStr.includes('/')) { [d, m, y] = dateStr.split('/'); } else if (dateStr.includes('-')) { [y, m, d] = dateStr.split('-'); }
+                        const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d)); normalizedDate = formatDate(dateObj); timestamp = dateObj.getTime();
+                    } catch (e) { normalizedDate = dateStr; timestamp = Date.now(); }
+                    const existing = await db.sets.where({ date: normalizedDate, exercise: exercise, sets: nSets, reps: nReps, weight: nWeight }).first();
+                    if (existing) { skippedCount++; continue; }
+                    await db.sets.add({ date: normalizedDate, exercise, sets: nSets, reps: nReps, weight: nWeight, rir: nRir, failure: bFailure, notes: sNotes, timestamp: timestamp });
+                    importedCount++;
+                }
+                alert(`¡Proceso completado!\n- Importados: ${importedCount}\n- Saltados (duplicados): ${skippedCount}`);
+                loadHistory(); updateActiveDays();
+            } catch (err) { alert('Hubo un error al procesar el archivo.'); }
+            input.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    populateSelects();
+    fp = flatpickr("#historyDatePicker", {
+        locale: "es", dateFormat: "Y-m-d", disableMobile: "true",
+        onDayCreate: function(dObj, dStr, fp, dayElem) {
+            const date = dayElem.dateObj;
+            const iso = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, '0') + "-" + String(date.getDate()).padStart(2, '0');
+            if (activeDates.has(iso)) dayElem.classList.add("has-activity");
+        },
+        onChange: function(selectedDates, dateStr) { setDateFromPicker(dateStr); }
+    });
+    updateActiveDays();
+    loadHistory();
+
+    // Registrar Service Worker para PWA
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker registrado', reg))
+                .catch(err => console.error('Error al registrar Service Worker', err));
+        });
+    }
+</script>
+
+</body>
+</html>
