@@ -439,6 +439,7 @@
                     <button onclick="changeDate(1)" style="width: auto; padding: 5px 10px; margin: 0; font-size: 0.8rem; background: var(--border-color); color: var(--text-color);">&rarr;</button>
                 </div>
             </div>
+            <button id="copyToTodayBtn" onclick="copySessionToToday()" style="display: none; background-color: #10b981; color: white; margin-bottom: 15px;">📋 Copiar sesión a hoy</button>
             <div id="historyList"></div>
         </div>
     </div>
@@ -531,13 +532,17 @@
         const repsSelect = document.getElementById('reps');
         repsSelect.innerHTML = '';
         for (let i = 6; i <= 20; i++) {
-            repsSelect.add(new Option(i, i));
+            const option = new Option(i, i);
+            if (i === 12) option.selected = true;
+            repsSelect.add(option);
         }
 
         const setsSelect = document.getElementById('sets');
         setsSelect.innerHTML = '';
         for (let i = 2; i <= 5; i++) {
-            setsSelect.add(new Option(i, i));
+            const option = new Option(i, i);
+            if (i === 3) option.selected = true;
+            setsSelect.add(option);
         }
 
         const rirSelect = document.getElementById('rir');
@@ -627,9 +632,49 @@
         }
     }
 
+    async function copySessionToToday() {
+        const dateStr = formatDate(currentViewDate);
+        const todayStr = formatDate(new Date());
+        
+        if (dateStr === todayStr) return;
+
+        const setsOfDay = await db.sets.where('date').equals(dateStr).toArray();
+        if (setsOfDay.length === 0) return;
+
+        if (confirm(`¿Quieres copiar los ${setsOfDay.length} ejercicios de esta sesión a hoy?`)) {
+            const now = new Date();
+            const baseTimestamp = now.getTime();
+            
+            // Ordenar por el timestamp original para mantener el orden
+            setsOfDay.sort((a, b) => a.timestamp - b.timestamp);
+
+            for (let i = 0; i < setsOfDay.length; i++) {
+                const s = setsOfDay[i];
+                await db.sets.add({
+                    exercise: s.exercise,
+                    sets: s.sets,
+                    reps: s.reps,
+                    weight: s.weight,
+                    rir: s.rir,
+                    failure: s.failure,
+                    notes: s.notes,
+                    date: todayStr,
+                    timestamp: baseTimestamp + i // Pequeño offset para mantener orden
+                });
+            }
+            
+            alert('Sesión copiada correctamente.');
+            currentViewDate = now;
+            loadHistory();
+            updateActiveDays();
+        }
+    }
+
     async function loadHistory() {
         const historyList = document.getElementById('historyList');
+        const copyBtn = document.getElementById('copyToTodayBtn');
         const dateStr = formatDate(currentViewDate);
+        const todayStr = formatDate(new Date());
         
         if (fp) fp.setDate(currentViewDate, false);
         
@@ -637,6 +682,13 @@
         
         historyList.innerHTML = '';
         
+        // Mostrar botón de copiar si estamos en el pasado y hay sets
+        if (dateStr !== todayStr && setsOfDay.length > 0) {
+            copyBtn.style.display = 'block';
+        } else {
+            copyBtn.style.display = 'none';
+        }
+
         const dateDiv = document.createElement('div');
         dateDiv.className = 'date-header';
         dateDiv.style.textAlign = 'center';
@@ -648,7 +700,10 @@
         } else {
             setsOfDay.sort((a, b) => a.timestamp - b.timestamp);
             
+            let totalVolume = 0;
+            
             setsOfDay.forEach(set => {
+                totalVolume += (set.sets * set.reps * set.weight);
                 const item = document.createElement('div');
                 item.className = 'history-item';
                 item.innerHTML = `
@@ -669,6 +724,18 @@
                 `;
                 historyList.appendChild(item);
             });
+
+            const volumeDiv = document.createElement('div');
+            volumeDiv.style.marginTop = '20px';
+            volumeDiv.style.padding = '15px';
+            volumeDiv.style.background = 'var(--card-bg)';
+            volumeDiv.style.borderRadius = '12px';
+            volumeDiv.style.border = '1px solid var(--border-color)';
+            volumeDiv.style.textAlign = 'center';
+            volumeDiv.style.fontWeight = 'bold';
+            volumeDiv.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+            volumeDiv.innerHTML = `Volumen total movido: <span style="color: var(--primary-color); font-size: 1.2rem;">${totalVolume.toLocaleString()} kg</span>`;
+            historyList.appendChild(volumeDiv);
         }
     }
 
