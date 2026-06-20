@@ -321,6 +321,34 @@
             body { padding: 10px; padding-top: 60px; }
             .card { padding: 15px; }
         }
+
+        /* Estilos para arrastrar y soltar (Drag and Drop) */
+        .drag-handle {
+            cursor: grab;
+            color: #94a3b8;
+            font-size: 1.3rem;
+            padding: 8px 4px;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+            color: var(--primary-color);
+        }
+        .history-item {
+            transition: background-color 0.2s, opacity 0.2s;
+            position: relative;
+        }
+        .history-item.dragging {
+            opacity: 0.6;
+            background-color: var(--border-color) !important;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -646,7 +674,10 @@
             const baseTimestamp = now.getTime();
             
             // Ordenar por el timestamp original para mantener el orden
-            setsOfDay.sort((a, b) => a.timestamp - b.timestamp);
+            setsOfDay.sort((a, b) => {
+                if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+                return a.id - b.id;
+            });
 
             for (let i = 0; i < setsOfDay.length; i++) {
                 const s = setsOfDay[i];
@@ -698,7 +729,10 @@
         if (setsOfDay.length === 0) {
             historyList.innerHTML += '<p style="text-align:center; padding: 20px;">No hay registros para este día.</p>';
         } else {
-            setsOfDay.sort((a, b) => a.timestamp - b.timestamp);
+            setsOfDay.sort((a, b) => {
+                if (a.timestamp !== b.timestamp) return a.timestamp - b.timestamp;
+                return a.id - b.id;
+            });
             
             let totalVolume = 0;
             
@@ -706,9 +740,11 @@
                 totalVolume += (set.sets * set.reps * set.weight);
                 const item = document.createElement('div');
                 item.className = 'history-item';
+                item.dataset.id = set.id;
                 item.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                        <div>
+                    <div style="display: flex; align-items: center; gap: 12px; width: 100%;">
+                        <div class="drag-handle">☰</div>
+                        <div style="flex: 1; min-width: 0;">
                             <div class="exercise-name">${set.exercise}</div>
                             <div class="set-details">
                                 ${set.sets} series x ${set.reps} reps | ${set.weight}kg | RIR ${set.rir}
@@ -716,7 +752,7 @@
                             </div>
                             ${set.notes ? `<div class="notes">${set.notes}</div>` : ''}
                         </div>
-                        <div style="display: flex; gap: 8px;">
+                        <div style="display: flex; gap: 6px; flex-shrink: 0;">
                             <button onclick="editSet(${set.id})" style="width: auto; padding: 6px 10px; font-size: 0.8rem; background: #3b82f6; color: white; margin: 0; border-radius: 4px;">Editar</button>
                             <button onclick="deleteSet(${set.id})" style="width: auto; padding: 6px 10px; font-size: 0.8rem; background: #ef4444; color: white; margin: 0; border-radius: 4px;">Borrar</button>
                         </div>
@@ -726,6 +762,7 @@
             });
 
             const volumeDiv = document.createElement('div');
+            volumeDiv.className = 'volume-summary';
             volumeDiv.style.marginTop = '20px';
             volumeDiv.style.padding = '15px';
             volumeDiv.style.background = 'var(--card-bg)';
@@ -813,6 +850,92 @@
     });
     updateActiveDays();
     loadHistory();
+
+    // Guardar el nuevo orden de los ejercicios en la base de datos
+    async function saveNewOrder() {
+        const items = [...document.querySelectorAll('.history-item')];
+        const ids = items.map(item => parseInt(item.dataset.id)).filter(Boolean);
+        if (ids.length === 0) return;
+
+        const dateStr = formatDate(currentViewDate);
+        const setsOfDay = await db.sets.where('date').equals(dateStr).toArray();
+        if (setsOfDay.length === 0) return;
+
+        // Obtener el menor timestamp de los sets de este día para mantener la misma base temporal
+        const minTimestamp = Math.min(...setsOfDay.map(s => s.timestamp));
+
+        // Actualizar cada set en el orden en que aparecen en el DOM
+        for (let i = 0; i < ids.length; i++) {
+            const id = ids[i];
+            await db.sets.update(id, { timestamp: minTimestamp + i });
+        }
+    }
+
+    // Configurar reordenamiento por arrastre con Pointer Events
+    (function initDragAndDrop() {
+        const historyList = document.getElementById('historyList');
+        let dragItem = null;
+
+        historyList.addEventListener('pointerdown', (e) => {
+            const handle = e.target.closest('.drag-handle');
+            if (!handle) return;
+
+            const item = handle.closest('.history-item');
+            if (!item) return;
+
+            dragItem = item;
+            dragItem.classList.add('dragging');
+
+            handle.setPointerCapture(e.pointerId);
+
+            const onPointerMove = (moveEvent) => {
+                if (!dragItem) return;
+                const clientY = moveEvent.clientY;
+
+                // Encontrar todos los elementos hermanos menos el que se está arrastrando
+                const siblings = [...historyList.querySelectorAll('.history-item:not(.dragging)')];
+                
+                // Encontrar el elemento ante el cual insertar el elemento arrastrado
+                const nextSibling = siblings.find(sibling => {
+                    const rect = sibling.getBoundingClientRect();
+                    return clientY < rect.top + rect.height / 2;
+                });
+
+                if (nextSibling) {
+                    if (nextSibling !== dragItem.nextElementSibling) {
+                        historyList.insertBefore(dragItem, nextSibling);
+                    }
+                } else {
+                    const volumeDiv = historyList.querySelector('.volume-summary');
+                    if (volumeDiv) {
+                        if (volumeDiv !== dragItem.nextElementSibling) {
+                            historyList.insertBefore(dragItem, volumeDiv);
+                        }
+                    } else {
+                        if (dragItem !== historyList.lastElementChild) {
+                            historyList.appendChild(dragItem);
+                        }
+                    }
+                }
+            };
+
+            const onPointerUp = async (upEvent) => {
+                if (dragItem) {
+                    dragItem.classList.remove('dragging');
+                    handle.releasePointerCapture(upEvent.pointerId);
+                    
+                    handle.removeEventListener('pointermove', onPointerMove);
+                    handle.removeEventListener('pointerup', onPointerUp);
+                    
+                    dragItem = null;
+                    await saveNewOrder();
+                }
+            };
+
+            handle.addEventListener('pointermove', onPointerMove);
+            handle.addEventListener('pointerup', onPointerUp);
+        });
+    })();
 
     // Registrar Service Worker para PWA
     if ('serviceWorker' in navigator) {

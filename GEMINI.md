@@ -7,7 +7,7 @@ Esta es una aplicación web progresiva (PWA) diseñada para realizar el seguimie
 - **Funcionamiento Offline:** Al ser una PWA con Service Worker (`sw.js`), la aplicación puede funcionar sin conexión a internet.
 - **Persistencia Local:** Utiliza **Dexie.js** (una envoltura para IndexedDB) para almacenar los datos directamente en el navegador del usuario.
 - **Interfaz Adaptable:** Diseño "Mobile First" con soporte para modo oscuro.
-- **Historial Detallado:** Permite visualizar y editar sesiones pasadas mediante un calendario integrado (**Flatpickr**).
+- **Historial Detallado:** Permite visualizar, editar y copiar sesiones pasadas mediante un calendario integrado (**Flatpickr**).
 - **Importación/Exportación:** Soporte para exportar e importar datos en formato CSV.
 
 ## Tecnologías Utilizadas
