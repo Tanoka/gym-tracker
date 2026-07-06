@@ -349,6 +349,64 @@
             box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
             border-radius: 8px;
         }
+
+        /* Estilos para Pestaña Progreso */
+        .stat-card {
+            background: rgba(0,0,0,0.02);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+        body.dark-mode .stat-card {
+            background: rgba(255,255,255,0.02);
+        }
+        .progress-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+        .progress-table th, .progress-table td {
+            padding: 10px 6px;
+            text-align: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .progress-table th {
+            font-weight: 600;
+            opacity: 0.8;
+            background-color: rgba(0, 0, 0, 0.01);
+        }
+        body.dark-mode .progress-table th {
+            background-color: rgba(255, 255, 255, 0.01);
+        }
+        .progress-table tr:hover {
+            background-color: rgba(0, 0, 0, 0.01);
+        }
+        body.dark-mode .progress-table tr:hover {
+            background-color: rgba(255, 255, 255, 0.01);
+        }
+        .progress-table td.date-cell {
+            color: var(--primary-color);
+            cursor: pointer;
+            font-weight: 500;
+            text-decoration: underline;
+        }
+        body.dark-mode .progress-table td.date-cell {
+            color: var(--active-day);
+        }
+        .progress-table tr.has-notes td {
+            border-bottom: none;
+            padding-bottom: 4px;
+        }
+        .progress-table tr.notes-row td {
+            padding-top: 0;
+            padding-bottom: 10px;
+            font-size: 0.8rem;
+            font-style: italic;
+            opacity: 0.7;
+            border-bottom: 1px solid var(--border-color);
+        }
     </style>
 </head>
 <body>
@@ -377,6 +435,7 @@
     <div class="tabs">
         <div id="tab-entrada" class="tab-btn active" onclick="switchTab('entrada')">Entrada</div>
         <div id="tab-historial" class="tab-btn" onclick="switchTab('historial')">Historial</div>
+        <div id="tab-progreso" class="tab-btn" onclick="switchTab('progreso')">Progreso</div>
     </div>
 
     <!-- Contenido Pestaña Entrada -->
@@ -471,6 +530,36 @@
             <div id="historyList"></div>
         </div>
     </div>
+
+    <!-- Contenido Pestaña Progreso -->
+    <div id="content-progreso" class="tab-content">
+        <div class="card">
+            <h2 style="margin-top:0; font-size: 1.2rem;">Progreso por Ejercicio</h2>
+            <div class="form-group">
+                <label for="progressExerciseSelect">Selecciona Ejercicio</label>
+                <select id="progressExerciseSelect" onchange="loadExerciseProgress()"></select>
+            </div>
+            
+            <div id="exerciseStats" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; display: none;">
+                <div class="stat-card">
+                    <div style="font-size: 0.8rem; opacity: 0.7;">Peso Máximo</div>
+                    <div id="statMaxWeight" style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);">0 kg</div>
+                </div>
+                <div class="stat-card">
+                    <div style="font-size: 0.8rem; opacity: 0.7;">Volumen Máximo</div>
+                    <div id="statMaxVolume" style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);">0 kg</div>
+                </div>
+                <div class="stat-card" style="grid-column: span 2;">
+                    <div style="font-size: 0.8rem; opacity: 0.7;">Total Series Registradas</div>
+                    <div id="statTotalSets" style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);">0</div>
+                </div>
+            </div>
+
+            <div id="progressTableContainer" style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                <p style="text-align:center; padding: 20px;">Selecciona un ejercicio para ver su histórico.</p>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -491,6 +580,133 @@
         
         document.getElementById(`tab-${tab}`).classList.add('active');
         document.getElementById(`content-${tab}`).classList.add('active');
+
+        if (tab === 'progreso') {
+            populateProgressExercises();
+        }
+    }
+
+    // Lógica de pestaña de progreso
+    async function populateProgressExercises() {
+        const select = document.getElementById('progressExerciseSelect');
+        const currentSelection = select.value;
+        select.innerHTML = '<option value="">-- Selecciona un ejercicio --</option>';
+        
+        const defaultExercises = [
+            "Jalón al pecho", "Remo maquina", "Remo una mano",
+            "Press inclinado maquina", "Aperturas",
+            "Prensa", "Gemelos en prensa", "Extension cuádriceps", "Curl femoral sentado", "Curl femoral tumbado",
+            "Triceps maquina", "Triceps polea", "Curl de biceps concentrado", "Elevaciones laterales en maquina", "Jalón a la cara"
+        ];
+        
+        const loggedExercises = await db.sets.orderBy('exercise').uniqueKeys();
+        
+        // Combinar ejercicios por defecto con los ya registrados
+        const allExercises = Array.from(new Set([...defaultExercises, ...loggedExercises])).sort();
+        
+        allExercises.forEach(ex => {
+            const option = new Option(ex, ex);
+            if (ex === currentSelection) option.selected = true;
+            select.add(option);
+        });
+        
+        if (currentSelection) {
+            loadExerciseProgress();
+        }
+    }
+
+    async function loadExerciseProgress() {
+        const select = document.getElementById('progressExerciseSelect');
+        const exercise = select.value;
+        const statsDiv = document.getElementById('exerciseStats');
+        const tableContainer = document.getElementById('progressTableContainer');
+        
+        if (!exercise) {
+            statsDiv.style.display = 'none';
+            tableContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Selecciona un ejercicio para ver su histórico.</p>';
+            return;
+        }
+        
+        const sets = await db.sets.where('exercise').equals(exercise).toArray();
+        
+        if (sets.length === 0) {
+            statsDiv.style.display = 'none';
+            tableContainer.innerHTML = '<p style="text-align:center; padding: 20px;">No hay registros para este ejercicio.</p>';
+            return;
+        }
+        
+        // Ordenar por timestamp descendente (más recientes primero)
+        sets.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Calcular estadísticas
+        let maxWeight = 0;
+        let maxVolume = 0;
+        let totalSets = 0;
+        
+        sets.forEach(set => {
+            if (set.weight > maxWeight) maxWeight = set.weight;
+            const volume = set.sets * set.reps * set.weight;
+            if (volume > maxVolume) maxVolume = volume;
+            totalSets += set.sets;
+        });
+        
+        document.getElementById('statMaxWeight').textContent = `${maxWeight} kg`;
+        document.getElementById('statMaxVolume').textContent = `${maxVolume.toLocaleString()} kg`;
+        document.getElementById('statTotalSets').textContent = totalSets;
+        statsDiv.style.display = 'grid';
+        
+        // Renderizar tabla comparativa
+        let html = `
+            <table class="progress-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Series</th>
+                        <th>Reps</th>
+                        <th>Peso</th>
+                        <th>RIR</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+        
+        sets.forEach(set => {
+            const hasNotes = !!set.notes;
+            const rowClass = hasNotes ? 'class="has-notes"' : '';
+            html += `
+                <tr ${rowClass}>
+                    <td class="date-cell" onclick="goToDate('${set.date}')">${set.date}</td>
+                    <td>${set.sets}</td>
+                    <td>${set.reps}${set.failure ? ' <span style="color: #ef4444;" title="Fallo">💥</span>' : ''}</td>
+                    <td>${set.weight} kg</td>
+                    <td>${set.rir}</td>
+                </tr>
+            `;
+            if (hasNotes) {
+                html += `
+                    <tr class="notes-row">
+                        <td colspan="5" style="text-align: left;">
+                            <strong>Nota:</strong> ${set.notes}
+                        </td>
+                    </tr>
+                `;
+            }
+        });
+        
+        html += `
+                </tbody>
+            </table>
+        `;
+        
+        tableContainer.innerHTML = html;
+    }
+
+    function goToDate(dateStr) {
+        if (!dateStr) return;
+        const [d, m, y] = dateStr.split('/').map(Number);
+        currentViewDate = new Date(y, m - 1, d);
+        loadHistory();
+        switchTab('historial');
     }
 
     // Menu y Modo Oscuro
