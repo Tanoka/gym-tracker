@@ -407,6 +407,109 @@
             opacity: 0.7;
             border-bottom: 1px solid var(--border-color);
         }
+        /* Estilos para Valoración y Notas de la Sesión */
+        .session-eval-card {
+            margin-top: 20px;
+        }
+        .session-eval-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .session-eval-title {
+            margin: 0;
+            font-size: 1.05rem;
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+        .save-status {
+            font-size: 0.78rem;
+            color: #10b981;
+            font-weight: 600;
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+        .save-status.visible {
+            opacity: 1;
+        }
+        .rating-group {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .rating-option {
+            background: var(--bg-color);
+            border: 2px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 6px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin-bottom: 0;
+            color: var(--text-color);
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .rating-option:hover {
+            border-color: #94a3b8;
+        }
+        .rating-option .stars {
+            font-size: 1.15rem;
+            line-height: 1.2;
+            letter-spacing: 1px;
+            filter: grayscale(100%);
+            opacity: 0.45;
+            transition: transform 0.2s ease, filter 0.2s ease, opacity 0.2s ease;
+        }
+        .rating-option .rating-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            opacity: 0.75;
+        }
+        .rating-option.active {
+            border-color: #f59e0b;
+            background: rgba(245, 158, 11, 0.1);
+            box-shadow: 0 2px 6px rgba(245, 158, 11, 0.15);
+        }
+        body.dark-mode .rating-option.active {
+            border-color: #fbbf24;
+            background: rgba(251, 191, 36, 0.15);
+        }
+        .rating-option.active .stars {
+            filter: grayscale(0%);
+            opacity: 1;
+            transform: scale(1.08);
+        }
+        .rating-option.active .rating-label {
+            opacity: 1;
+            color: #d97706;
+        }
+        body.dark-mode .rating-option.active .rating-label {
+            color: #fbbf24;
+        }
+        .session-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.85rem;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(245, 158, 11, 0.15);
+            color: #b45309;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+        body.dark-mode .session-badge {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+        }
     </style>
 </head>
 <body>
@@ -518,6 +621,34 @@
                 <button type="submit" id="submitBtn" class="btn-primary">Guardar Serie</button>
             </form>
         </div>
+
+        <div class="card session-eval-card">
+            <div class="session-eval-header">
+                <h3 class="session-eval-title">Valoración de la Sesión (Hoy)</h3>
+                <span id="todaySaveStatus" class="save-status">✓ Guardado</span>
+            </div>
+            <div class="form-group">
+                <label>Calidad de la sesión</label>
+                <div class="rating-group" id="todayRatingGroup">
+                    <button type="button" class="rating-option" data-rating="1" onclick="setSessionRating('today', 1)">
+                        <span class="stars">⭐</span>
+                        <span class="rating-label">Malo</span>
+                    </button>
+                    <button type="button" class="rating-option" data-rating="2" onclick="setSessionRating('today', 2)">
+                        <span class="stars">⭐⭐</span>
+                        <span class="rating-label">Normal</span>
+                    </button>
+                    <button type="button" class="rating-option" data-rating="3" onclick="setSessionRating('today', 3)">
+                        <span class="stars">⭐⭐⭐</span>
+                        <span class="rating-label">Bueno</span>
+                    </button>
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="todaySessionNotes">Notas de la sesión</label>
+                <textarea id="todaySessionNotes" rows="2" placeholder="¿Cómo te has sentido en la sesión de hoy?" oninput="scheduleSessionNotesSave('today')"></textarea>
+            </div>
+        </div>
     </div>
 
     <!-- Contenido Pestaña Historial -->
@@ -533,6 +664,33 @@
             </div>
             <button id="copyToTodayBtn" onclick="copySessionToToday()" style="display: none; background-color: #10b981; color: white; margin-bottom: 15px;">📋 Copiar sesión a hoy</button>
             <div id="historyList"></div>
+            <div class="card session-eval-card" id="historySessionEvalCard">
+                <div class="session-eval-header">
+                    <h3 class="session-eval-title">Valoración de la Sesión</h3>
+                    <span id="historySaveStatus" class="save-status">✓ Guardado</span>
+                </div>
+                <div class="form-group">
+                    <label>Calidad de la sesión</label>
+                    <div class="rating-group" id="historyRatingGroup">
+                        <button type="button" class="rating-option" data-rating="1" onclick="setSessionRating('history', 1)">
+                            <span class="stars">⭐</span>
+                            <span class="rating-label">Malo</span>
+                        </button>
+                        <button type="button" class="rating-option" data-rating="2" onclick="setSessionRating('history', 2)">
+                            <span class="stars">⭐⭐</span>
+                            <span class="rating-label">Normal</span>
+                        </button>
+                        <button type="button" class="rating-option" data-rating="3" onclick="setSessionRating('history', 3)">
+                            <span class="stars">⭐⭐⭐</span>
+                            <span class="rating-label">Bueno</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="historySessionNotes">Notas de la sesión</label>
+                    <textarea id="historySessionNotes" rows="2" placeholder="Añade notas generales sobre esta sesión..." oninput="scheduleSessionNotesSave('history')"></textarea>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -573,6 +731,10 @@
     db.version(1).stores({
         sets: "++id, date, exercise, timestamp"
     });
+    db.version(2).stores({
+        sets: "++id, date, exercise, timestamp",
+        sessions: "date"
+    });
 
     let currentViewDate = new Date();
     let fp; 
@@ -588,7 +750,104 @@
 
         if (tab === 'progreso') {
             populateProgressExercises();
+        } else if (tab === 'entrada') {
+            loadSessionEval('today');
+        } else if (tab === 'historial') {
+            loadHistory();
         }
+    }
+
+    const RATING_INFO = {
+        1: { stars: '⭐', label: 'Malo' },
+        2: { stars: '⭐⭐', label: 'Normal' },
+        3: { stars: '⭐⭐⭐', label: 'Bueno' }
+    };
+    let notesSaveTimers = {};
+
+    function showSaveStatus(context) {
+        const el = document.getElementById(context === 'today' ? 'todaySaveStatus' : 'historySaveStatus');
+        if (!el) return;
+        el.classList.add('visible');
+        clearTimeout(el._hideTimer);
+        el._hideTimer = setTimeout(() => el.classList.remove('visible'), 1800);
+    }
+
+    function renderDateHeaderContent(dateStr, rating) {
+        const dateLabel = (dateStr === formatDate(new Date())) ? `Hoy (${dateStr})` : dateStr;
+        const badge = (rating && RATING_INFO[rating])
+            ? `<span class="session-badge">${RATING_INFO[rating].stars} ${RATING_INFO[rating].label}</span>`
+            : '';
+        return `${dateLabel}${badge}`;
+    }
+
+    async function loadSessionEval(context) {
+        const dateStr = context === 'today' ? formatDate(new Date()) : formatDate(currentViewDate);
+        const session = await db.sessions.get(dateStr);
+        const rating = session && session.rating ? session.rating : 0;
+        const notes = session && session.notes ? session.notes : '';
+
+        const group = document.getElementById(context === 'today' ? 'todayRatingGroup' : 'historyRatingGroup');
+        if (group) {
+            group.querySelectorAll('.rating-option').forEach(btn => {
+                const btnRating = parseInt(btn.dataset.rating);
+                btn.classList.toggle('active', btnRating === rating);
+            });
+        }
+
+        const notesEl = document.getElementById(context === 'today' ? 'todaySessionNotes' : 'historySessionNotes');
+        if (notesEl && document.activeElement !== notesEl) {
+            notesEl.value = notes;
+        }
+    }
+
+    async function setSessionRating(context, ratingValue) {
+        const dateStr = context === 'today' ? formatDate(new Date()) : formatDate(currentViewDate);
+        const existing = await db.sessions.get(dateStr) || { date: dateStr, rating: 0, notes: '' };
+        const newRating = existing.rating === ratingValue ? 0 : ratingValue;
+        const notes = existing.notes || '';
+
+        if (newRating === 0 && !notes.trim()) {
+            await db.sessions.delete(dateStr);
+        } else {
+            await db.sessions.put({ date: dateStr, rating: newRating, notes });
+        }
+
+        await loadSessionEval('today');
+        await loadSessionEval('history');
+
+        const headerEl = document.querySelector('#historyList .date-header');
+        if (headerEl && dateStr === formatDate(currentViewDate)) {
+            headerEl.innerHTML = renderDateHeaderContent(dateStr, newRating);
+        }
+
+        showSaveStatus(context);
+        updateActiveDays();
+    }
+
+    function scheduleSessionNotesSave(context) {
+        clearTimeout(notesSaveTimers[context]);
+        notesSaveTimers[context] = setTimeout(async () => {
+            const dateStr = context === 'today' ? formatDate(new Date()) : formatDate(currentViewDate);
+            const notesEl = document.getElementById(context === 'today' ? 'todaySessionNotes' : 'historySessionNotes');
+            if (!notesEl) return;
+
+            const notes = notesEl.value;
+            const existing = await db.sessions.get(dateStr) || { date: dateStr, rating: 0, notes: '' };
+            const rating = existing.rating || 0;
+
+            if (rating === 0 && !notes.trim()) {
+                await db.sessions.delete(dateStr);
+            } else {
+                await db.sessions.put({ date: dateStr, rating, notes });
+            }
+
+            if (dateStr === formatDate(new Date())) {
+                await loadSessionEval(context === 'today' ? 'history' : 'today');
+            }
+
+            showSaveStatus(context);
+            updateActiveDays();
+        }, 400);
     }
 
     // Lógica de pestaña de progreso
@@ -745,7 +1004,9 @@
     }
 
     async function updateActiveDays() {
-        const allDates = await db.sets.orderBy('date').uniqueKeys();
+        const setDates = await db.sets.orderBy('date').uniqueKeys();
+        const sessionDates = await db.sessions.orderBy('date').uniqueKeys();
+        const allDates = Array.from(new Set([...setDates, ...sessionDates]));
         activeDates = new Set();
         allDates.forEach(dateStr => {
             const [d, m, y] = dateStr.split('/');
@@ -944,7 +1205,10 @@
         const dateDiv = document.createElement('div');
         dateDiv.className = 'date-header';
         dateDiv.style.textAlign = 'center';
-        dateDiv.textContent = (dateStr === formatDate(new Date())) ? `Hoy (${dateStr})` : dateStr;
+        const sessionOfDay = await db.sessions.get(dateStr);
+        dateDiv.innerHTML = renderDateHeaderContent(dateStr, sessionOfDay ? sessionOfDay.rating : 0);
+        await loadSessionEval('history');
+        await loadSessionEval('today');
         historyList.appendChild(dateDiv);
 
         if (setsOfDay.length === 0) {
@@ -1003,9 +1267,13 @@
             alert('No hay datos para exportar.');
             return;
         }
-        const headers = ["Fecha", "Ejercicio", "Series", "Repeticiones", "Peso (kg)", "RIR", "Fallo", "Notas"];
+        const allSessions = await db.sessions.toArray();
+        const sessionMap = new Map(allSessions.map(sess => [sess.date, sess]));
+        const headers = ["Fecha", "Ejercicio", "Series", "Repeticiones", "Peso (kg)", "RIR", "Fallo", "Notas", "Calidad Sesión", "Notas Sesión"];
         const rows = allSets.map(s => [
-            s.date, s.exercise, s.sets, s.reps, s.weight, s.rir, s.failure ? "SÍ" : "NO", s.notes ? s.notes.replace(/"/g, '""') : ""
+            s.date, s.exercise, s.sets, s.reps, s.weight, s.rir, s.failure ? "SÍ" : "NO", s.notes ? s.notes.replace(/"/g, '""') : "",
+            (sessionMap.get(s.date) && RATING_INFO[sessionMap.get(s.date).rating]) ? RATING_INFO[sessionMap.get(s.date).rating].label : "",
+            (sessionMap.get(s.date) && sessionMap.get(s.date).notes) ? sessionMap.get(s.date).notes.replace(/"/g, '""') : ""
         ]);
         let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(r => r.map(cell => `"${cell}"`).join(",")).join("\n");
         const encodedUri = encodeURI(csvContent);
@@ -1038,7 +1306,7 @@
                     }
                     cells.push(current.trim());
                     if (cells.length < 7) continue;
-                    let [dateStr, exercise, sets, reps, weight, rir, failure, notes] = cells;
+                    let [dateStr, exercise, sets, reps, weight, rir, failure, notes, sessionQuality, sessionNotes] = cells;
                     const nSets = parseInt(sets) || 0; const nReps = parseInt(reps) || 0; const nWeight = parseFloat(weight) || 0;
                     const nRir = parseInt(rir) || 0; const bFailure = failure === "SÍ" || failure === "true"; const sNotes = notes || "";
                     let normalizedDate; let timestamp;
@@ -1046,6 +1314,20 @@
                         let d, m, y; if (dateStr.includes('/')) { [d, m, y] = dateStr.split('/'); } else if (dateStr.includes('-')) { [y, m, d] = dateStr.split('-'); }
                         const dateObj = new Date(parseInt(y), parseInt(m) - 1, parseInt(d)); normalizedDate = formatDate(dateObj); timestamp = dateObj.getTime();
                     } catch (e) { normalizedDate = dateStr; timestamp = Date.now(); }
+                    if (sessionQuality || sessionNotes) {
+                        const existingSession = await db.sessions.get(normalizedDate) || { date: normalizedDate, rating: 0, notes: '' };
+                        let parsedRating = existingSession.rating || 0;
+                        if (sessionQuality) {
+                            const q = sessionQuality.toLowerCase();
+                            if (q === 'malo' || q === '1') parsedRating = 1;
+                            else if (q === 'normal' || q === '2') parsedRating = 2;
+                            else if (q === 'bueno' || q === '3') parsedRating = 3;
+                        }
+                        const parsedSessionNotes = sessionNotes || existingSession.notes || '';
+                        if (parsedRating > 0 || parsedSessionNotes.trim()) {
+                            await db.sessions.put({ date: normalizedDate, rating: parsedRating, notes: parsedSessionNotes });
+                        }
+                    }
                     const existing = await db.sets.where({ date: normalizedDate, exercise: exercise, sets: nSets, reps: nReps, weight: nWeight }).first();
                     if (existing) { skippedCount++; continue; }
                     await db.sets.add({ date: normalizedDate, exercise, sets: nSets, reps: nReps, weight: nWeight, rir: nRir, failure: bFailure, notes: sNotes, timestamp: timestamp });
