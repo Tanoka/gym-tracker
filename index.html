@@ -215,6 +215,30 @@
             color: #fbbf24;
         }
 
+        .past-date-info {
+            background: #dbeafe;
+            border: 1px solid #3b82f6;
+            color: #1e40af;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+
+        body.dark-mode .past-date-info {
+            background: #172554;
+            border-color: #2563eb;
+            color: #93c5fd;
+        }
+
+        .entry-date-input {
+            cursor: pointer;
+        }
+
         h2 {
             text-align: center;
             color: var(--primary-color);
@@ -548,10 +572,24 @@
             <button onclick="resetForm()" style="width: auto; padding: 4px 8px; margin: 0; font-size: 0.7rem; background: #92400e; color: white; border-radius: 4px;">Cancelar</button>
         </div>
 
+        <div id="pastDateIndicator" class="past-date-info">
+            <span>📅 Añadiendo a sesión del <strong id="pastDateLabel"></strong></span>
+            <button type="button" onclick="resetEntryDateToToday()" style="width: auto; padding: 4px 8px; margin: 0; font-size: 0.75rem; background: var(--primary-color); color: white; border-radius: 4px;">Volver a hoy</button>
+        </div>
+
         <div class="card">
             <h2 id="formTitle" style="margin-top:0; font-size: 1.2rem;">Nueva Serie</h2>
             <form id="workoutForm">
                 <input type="hidden" id="editId">
+                <div class="form-group">
+                    <label for="entryDatePicker">Fecha de la sesión</label>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="flex: 1;">
+                            <input type="text" id="entryDatePicker" style="cursor: pointer;" readonly>
+                        </div>
+                        <button type="button" id="entryTodayBtn" onclick="resetEntryDateToToday()" style="display: none; width: auto; padding: 12px 14px; margin: 0; font-size: 0.85rem; background: var(--border-color); color: var(--text-color); white-space: nowrap;">Hoy</button>
+                    </div>
+                </div>
                 <div class="form-group">
                     <label for="exercise">Ejercicio</label>
                     <select id="exercise" required>
@@ -625,7 +663,7 @@
 
         <div class="card session-eval-card">
             <div class="session-eval-header">
-                <h3 class="session-eval-title">Valoración de la Sesión (Hoy)</h3>
+                <h3 class="session-eval-title" id="entrySessionEvalTitle">Valoración de la Sesión (Hoy)</h3>
                 <span id="todaySaveStatus" class="save-status">✓ Guardado</span>
             </div>
             <div class="form-group">
@@ -665,6 +703,7 @@
             </div>
             <button id="copyToTodayBtn" onclick="copySessionToToday()" style="display: none; background-color: #10b981; color: white; margin-bottom: 15px;">📋 Copiar sesión a hoy</button>
             <div id="historyList"></div>
+            <button id="addExerciseToSessionBtn" type="button" onclick="addExerciseToViewedSession()" class="btn-primary" style="margin-top: 15px; margin-bottom: 0;">➕ Añadir ejercicio a esta sesión</button>
             <div class="card session-eval-card" id="historySessionEvalCard">
                 <div class="session-eval-header">
                     <h3 class="session-eval-title">Valoración de la Sesión</h3>
@@ -738,7 +777,9 @@
     });
 
     let currentViewDate = new Date();
+    let currentEntryDate = new Date();
     let fp; 
+    let fpEntry;
     let activeDates = new Set();
 
     // Lógica de Pestañas
@@ -752,7 +793,7 @@
         if (tab === 'progreso') {
             populateProgressExercises();
         } else if (tab === 'entrada') {
-            loadSessionEval('today');
+            updateEntryDateUI();
         } else if (tab === 'historial') {
             loadHistory();
         }
@@ -782,7 +823,7 @@
     }
 
     async function loadSessionEval(context) {
-        const dateStr = context === 'today' ? formatDate(new Date()) : formatDate(currentViewDate);
+        const dateStr = context === 'today' ? formatDate(currentEntryDate) : formatDate(currentViewDate);
         const session = await db.sessions.get(dateStr);
         const rating = session && session.rating ? session.rating : 0;
         const notes = session && session.notes ? session.notes : '';
@@ -802,7 +843,7 @@
     }
 
     async function setSessionRating(context, ratingValue) {
-        const dateStr = context === 'today' ? formatDate(new Date()) : formatDate(currentViewDate);
+        const dateStr = context === 'today' ? formatDate(currentEntryDate) : formatDate(currentViewDate);
         const existing = await db.sessions.get(dateStr) || { date: dateStr, rating: 0, notes: '' };
         const newRating = existing.rating === ratingValue ? 0 : ratingValue;
         const notes = existing.notes || '';
@@ -826,13 +867,13 @@
     }
 
     function scheduleSessionNotesSave(context) {
+        const dateStr = context === 'today' ? formatDate(currentEntryDate) : formatDate(currentViewDate);
+        const notesEl = document.getElementById(context === 'today' ? 'todaySessionNotes' : 'historySessionNotes');
+        if (!notesEl) return;
+        const notes = notesEl.value;
+
         clearTimeout(notesSaveTimers[context]);
         notesSaveTimers[context] = setTimeout(async () => {
-            const dateStr = context === 'today' ? formatDate(new Date()) : formatDate(currentViewDate);
-            const notesEl = document.getElementById(context === 'today' ? 'todaySessionNotes' : 'historySessionNotes');
-            if (!notesEl) return;
-
-            const notes = notesEl.value;
             const existing = await db.sessions.get(dateStr) || { date: dateStr, rating: 0, notes: '' };
             const rating = existing.rating || 0;
 
@@ -842,8 +883,10 @@
                 await db.sessions.put({ date: dateStr, rating, notes });
             }
 
-            if (dateStr === formatDate(new Date())) {
-                await loadSessionEval(context === 'today' ? 'history' : 'today');
+            const otherContext = context === 'today' ? 'history' : 'today';
+            const otherDateStr = otherContext === 'today' ? formatDate(currentEntryDate) : formatDate(currentViewDate);
+            if (dateStr === otherDateStr) {
+                await loadSessionEval(otherContext);
             }
 
             showSaveStatus(context);
@@ -1014,6 +1057,7 @@
             activeDates.add(`${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`);
         });
         if (fp) fp.redraw();
+        if (fpEntry) fpEntry.redraw();
     }
 
     function setDateFromPicker(val) {
@@ -1063,13 +1107,105 @@
         }
     }
 
+    function parseDateES(dateStr) {
+        const [d, m, y] = dateStr.split('/').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    async function getTimestampForDate(dateObj, targetDateStr) {
+        const now = new Date();
+        const todayStr = formatDate(now);
+        const existingSets = await db.sets.where('date').equals(targetDateStr).toArray();
+
+        if (targetDateStr === todayStr) {
+            if (existingSets.length > 0) {
+                const maxTs = Math.max(...existingSets.map(s => s.timestamp || 0));
+                return Math.max(now.getTime(), maxTs + 1);
+            }
+            return now.getTime();
+        }
+
+        if (existingSets.length > 0) {
+            const maxTs = Math.max(...existingSets.map(s => s.timestamp || 0));
+            return maxTs + 1;
+        }
+
+        return new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate(), 12, 0, 0, 0).getTime();
+    }
+
+    function updateEntryDateUI() {
+        const editId = document.getElementById('editId').value;
+        const entryDateStr = formatDate(currentEntryDate);
+        const todayStr = formatDate(new Date());
+        const isToday = entryDateStr === todayStr;
+
+        if (fpEntry) fpEntry.setDate(currentEntryDate, false);
+
+        const todayBtn = document.getElementById('entryTodayBtn');
+        const pastIndicator = document.getElementById('pastDateIndicator');
+        const pastDateLabel = document.getElementById('pastDateLabel');
+        const formTitle = document.getElementById('formTitle');
+        const submitBtn = document.getElementById('submitBtn');
+        const evalTitle = document.getElementById('entrySessionEvalTitle');
+        const evalNotes = document.getElementById('todaySessionNotes');
+
+        if (todayBtn) todayBtn.style.display = isToday ? 'none' : 'inline-block';
+
+        if (!editId) {
+            if (pastIndicator) pastIndicator.style.display = isToday ? 'none' : 'flex';
+            if (pastDateLabel) pastDateLabel.textContent = entryDateStr;
+            formTitle.textContent = isToday ? 'Nueva Serie' : `Nueva Serie (${entryDateStr})`;
+            submitBtn.textContent = isToday ? 'Guardar Serie' : `Guardar en ${entryDateStr}`;
+        } else {
+            if (pastIndicator) pastIndicator.style.display = 'none';
+            document.getElementById('editDateLabel').textContent = entryDateStr;
+        }
+
+        if (evalTitle) {
+            evalTitle.textContent = isToday
+                ? 'Valoración de la Sesión (Hoy)'
+                : `Valoración de la Sesión (${entryDateStr})`;
+        }
+        if (evalNotes) {
+            evalNotes.placeholder = isToday
+                ? '¿Cómo te has sentido en la sesión de hoy?'
+                : `¿Cómo te sentiste en la sesión del ${entryDateStr}?`;
+        }
+
+        loadSessionEval('today');
+    }
+
+    function setEntryDateFromPicker(val) {
+        if (!val) return;
+        const [year, month, day] = val.split('-').map(Number);
+        currentEntryDate = new Date(year, month - 1, day);
+        updateEntryDateUI();
+    }
+
+    function resetEntryDateToToday() {
+        currentEntryDate = new Date();
+        updateEntryDateUI();
+    }
+
+    function addExerciseToViewedSession() {
+        resetForm();
+        currentEntryDate = new Date(
+            currentViewDate.getFullYear(),
+            currentViewDate.getMonth(),
+            currentViewDate.getDate()
+        );
+        updateEntryDateUI();
+        switchTab('entrada');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     function resetForm() {
         document.getElementById('workoutForm').reset();
         document.getElementById('editId').value = '';
-        document.getElementById('formTitle').textContent = 'Nueva Serie';
-        document.getElementById('submitBtn').textContent = 'Guardar Serie';
         document.getElementById('editIndicator').style.display = 'none';
+        currentEntryDate = new Date();
         populateSelects();
+        updateEntryDateUI();
     }
 
     document.getElementById('workoutForm').onsubmit = async (e) => {
@@ -1077,14 +1213,25 @@
         
         const editId = document.getElementById('editId').value;
         const now = new Date();
+        const todayStr = formatDate(now);
+        const selectedDate = new Date(
+            currentEntryDate.getFullYear(),
+            currentEntryDate.getMonth(),
+            currentEntryDate.getDate()
+        );
         
-        let targetDate = formatDate(now);
-        let timestamp = now.getTime();
+        let targetDate = formatDate(selectedDate);
+        let timestamp;
 
         if (editId) {
             const oldSet = await db.sets.get(parseInt(editId));
-            targetDate = oldSet.date;
-            timestamp = oldSet.timestamp;
+            if (oldSet && oldSet.date === targetDate) {
+                timestamp = oldSet.timestamp;
+            } else {
+                timestamp = await getTimestampForDate(selectedDate, targetDate);
+            }
+        } else {
+            timestamp = await getTimestampForDate(selectedDate, targetDate);
         }
 
         const setData = {
@@ -1099,17 +1246,20 @@
             timestamp: timestamp
         };
 
+        const isOtherDate = targetDate !== todayStr;
+
         if (editId) {
             await db.sets.update(parseInt(editId), setData);
+            currentViewDate = selectedDate;
         } else {
             await db.sets.add(setData);
-            currentViewDate = now;
+            currentViewDate = selectedDate;
         }
 
         resetForm();
         loadHistory();
         updateActiveDays();
-        if (editId) switchTab('historial');
+        if (editId || isOtherDate) switchTab('historial');
     };
 
     async function editSet(id) {
@@ -1125,11 +1275,14 @@
         document.getElementById('failure').checked = set.failure;
         document.getElementById('notes').value = set.notes;
 
+        currentEntryDate = parseDateES(set.date);
+
         document.getElementById('formTitle').textContent = 'Editar Serie';
         document.getElementById('submitBtn').textContent = 'Actualizar Serie';
         
         document.getElementById('editDateLabel').textContent = set.date;
         document.getElementById('editIndicator').style.display = 'flex';
+        updateEntryDateUI();
         
         switchTab('entrada');
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1352,6 +1505,22 @@
         },
         onChange: function(selectedDates, dateStr) { setDateFromPicker(dateStr); }
     });
+    fpEntry = flatpickr("#entryDatePicker", {
+        locale: "es",
+        dateFormat: "Y-m-d",
+        altInput: true,
+        altFormat: "d/m/Y",
+        altInputClass: "entry-date-input",
+        disableMobile: "true",
+        defaultDate: currentEntryDate,
+        onDayCreate: function(dObj, dStr, fpInstance, dayElem) {
+            const date = dayElem.dateObj;
+            const iso = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, '0') + "-" + String(date.getDate()).padStart(2, '0');
+            if (activeDates.has(iso)) dayElem.classList.add("has-activity");
+        },
+        onChange: function(selectedDates, dateStr) { setEntryDateFromPicker(dateStr); }
+    });
+    updateEntryDateUI();
     updateActiveDays();
     loadHistory();
 
